@@ -22,6 +22,11 @@ def download_model_to_image(model_dir, model_name):
     move_cache()
 
 
+# ### Image definition
+# We’ll start from a Docker Hub image by NVIDIA and install `vLLM`.
+# Then we’ll use `run_function` to execute `download_model_to_image`
+# and save the resulting files to the container image -- that way we don't need
+# to redownload the weights every time we change the server's code or start up more instances of the server.
 image = (
     modal.Image.debian_slim()
     .pip_install(
@@ -51,6 +56,12 @@ with image.imports():
     import vllm
 
 # ## Encapulate the model in a class
+#
+# The inference function is best represented with Modal's [class syntax](/docs/guide/lifecycle-functions) and the `@enter` decorator.
+# This enables us to load the model into memory just once every time a container starts up, and keep it cached
+# on the GPU for each subsequent invocation of the function.
+#
+# The `vLLM` library allows the code to remain quite clean!
 
 GPU_CONFIG = modal.gpu.H100(count=1)
 
@@ -117,6 +128,12 @@ class Model:
             ray.shutdown()
 
 
+# ## Run the model
+# We define a [`local_entrypoint`](/docs/guide/apps#entrypoints-for-ephemeral-apps) to call our remote function
+# sequentially for a list of inputs. Run it by executing the command `modal run vllm_inference.py`.
+#
+# The examples below are meant to put the model through its paces, with a variety of questions and prompts.
+# We also calculate the throughput and latency we achieve.
 @stub.local_entrypoint()
 def main():
     questions = [
